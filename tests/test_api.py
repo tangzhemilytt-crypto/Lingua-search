@@ -39,5 +39,51 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
 
 
+    def test_post_search(self):
+        response = client.post(
+            "/search",
+            json={
+                "keyword": "Language",
+                "case_sensitive": True
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 2)
+
+    def test_post_default_case(self):
+        response = client.post(
+            "/search",
+            json={"keyword": "language"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 3)
+
+    def test_post_empty_keyword(self):
+        response = client.post(
+            "/search",
+            json={"keyword": ""}
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_post_whitespace_keyword(self):
+        response = client.post(
+            "/search",
+            json={"keyword": "   "}
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_post_missing_keyword(self):
+        response = client.post(
+            "/search",
+            json={"case_sensitive": True}
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+
 if __name__ == "__main__":
     unittest.main()

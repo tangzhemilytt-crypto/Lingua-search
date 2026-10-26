@@ -1,8 +1,8 @@
 
-
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 from src.search import search_document
 
@@ -16,13 +16,16 @@ DATA_FILE = (
 )
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+# Define the expected JSON request body
+class SearchRequest(BaseModel):
+    keyword: str = Field(min_length=1)
+    case_sensitive: bool = False
 
 
-@app.get("/search")
-def search(keyword: str):
+def perform_search(
+    keyword: str,
+    case_sensitive: bool = False
+):
     if not keyword.strip():
         raise HTTPException(
             status_code=400,
@@ -30,7 +33,12 @@ def search(keyword: str):
         )
 
     text = DATA_FILE.read_text(encoding="utf-8")
-    matches = search_document(text, keyword)
+
+    matches = search_document(
+        text,
+        keyword,
+        case_sensitive=case_sensitive
+    )
 
     results = [
         {"line": line_number, "text": line}
@@ -39,6 +47,25 @@ def search(keyword: str):
 
     return {
         "keyword": keyword,
+        "case_sensitive": case_sensitive,
         "count": len(results),
         "results": results
     }
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
+@app.get("/search")
+def get_search(keyword: str):
+    return perform_search(keyword)
+
+
+@app.post("/search")
+def post_search(request: SearchRequest):
+    return perform_search(
+        request.keyword,
+        case_sensitive=request.case_sensitive
+    )

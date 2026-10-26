@@ -31,6 +31,33 @@ class TestSearchDocument(unittest.TestCase):
         result = search_document(text, "   ")
         self.assertEqual(result, [])
 
+    
+    def test_case_sensitive_search(self):
+        text = "Language\nlanguage\nLANGUAGE"
+
+        result = search_document(
+            text,
+            "language",
+            case_sensitive=True
+        )
+
+        self.assertEqual(
+            result,
+            [(2, "language")]
+        )
+
+    def test_case_insensitive_explicit(self):
+        text = "Language\nlanguage\nLANGUAGE"
+
+        result = search_document(
+            text,
+            "language",
+            case_sensitive=False
+        )
+
+        self.assertEqual(len(result), 3)
+
+
 
 if __name__ == "__main__":
     unittest.main()
