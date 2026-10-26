@@ -1,0 +1,21 @@
+services:
+  linguasearch:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATABASE_PATH: /app/runtime/lingua.db
+      WORKSPACE_TOKEN: ${WORKSPACE_TOKEN:?Set a random WORKSPACE_TOKEN of at least 32 characters in .env}
+    volumes:
+      - lingua-data:/app/runtime
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1.5
+volumes:
+  lingua-data:
