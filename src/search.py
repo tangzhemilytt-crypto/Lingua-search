@@ -1,3 +1,4 @@
+from pathlib import Path
 
 def search_document(
     text: str,
@@ -25,5 +26,32 @@ def search_document(
 
         if search_keyword in search_line:
             results.append((line_number, line))
+
+    return results
+
+
+def search_all_documents(
+    folder_path: str,
+    keyword: str,
+    case_sensitive: bool = False
+) -> list[dict]:
+
+    results = []
+    folder = Path(folder_path)
+
+    for file in sorted(folder.glob("*.txt")):
+
+    
+        text = file.read_text(encoding="utf-8")
+
+        
+        matches = search_document(text, keyword, case_sensitive=case_sensitive)
+
+        for line_number, line in matches:
+            results.append({
+                "filename": file.name,
+                "line": line_number,
+                "text": line
+            })
 
     return results

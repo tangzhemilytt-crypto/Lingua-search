@@ -1,4 +1,8 @@
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from src.search import search_document, search_all_documents
 import unittest
 
 from src.search import search_document
@@ -58,6 +62,51 @@ class TestSearchDocument(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
 
+    def test_multi_document_search(self):
+        results = search_all_documents("data", "language")
+
+        filenames = [result["filename"] for result in results]
+
+        self.assertIn("linguistics.txt", filenames)
+        self.assertIn("identity.txt", filenames)
+        self.assertIn("ai.txt", filenames)
+
+    
+    def test_multi_document_with_temp_directory(self):
+        with TemporaryDirectory() as temp_dir:
+            folder = Path(temp_dir)
+
+            (folder / "first.txt").write_text(
+                "Language is powerful.\nPython is useful.",
+                encoding="utf-8"
+            )
+
+            (folder / "second.txt").write_text(
+                "I study language and identity.",
+                encoding="utf-8"
+            )
+
+            (folder / "ignore.pdf").write_text(
+                "Language appears here too.",
+                encoding="utf-8"
+            )
+
+            results = search_all_documents(
+                temp_dir,
+                "language"
+            )
+
+            self.assertEqual(len(results), 2)
+
+            self.assertEqual(
+                [result["filename"] for result in results],
+                ["first.txt", "second.txt"]
+            )
+
+            self.assertEqual(
+                results[0]["line"],
+                1
+            )
 
 if __name__ == "__main__":
     unittest.main()

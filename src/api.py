@@ -4,8 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from src.search import search_document
-
+from src.search import search_document, search_all_documents
 
 app = FastAPI(title="LinguaSearch API")
 
@@ -14,7 +13,7 @@ DATA_FILE = (
     / "data"
     / "linguistics.txt"
 )
-
+DATA_DIR = DATA_FILE.parent
 
 # Define the expected JSON request body
 class SearchRequest(BaseModel):
@@ -69,3 +68,24 @@ def post_search(request: SearchRequest):
         request.keyword,
         case_sensitive=request.case_sensitive
     )
+
+@app.post("/search/all")
+def post_search_all(request: SearchRequest):
+    if not request.keyword.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Keyword cannot be empty"
+        )
+
+    results = search_all_documents(
+        folder_path=str(DATA_DIR),
+        keyword=request.keyword,
+        case_sensitive=request.case_sensitive
+    )
+
+    return {
+        "keyword": request.keyword,
+        "case_sensitive": request.case_sensitive,
+        "count": len(results),
+        "results": results
+    }
