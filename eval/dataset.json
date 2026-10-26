@@ -1,0 +1,43 @@
+{
+  "note": "Synthetic evaluation set. Every passage is English-only so Chinese queries test true cross-language retrieval. Each query has exactly one relevant passage.",
+  "passages": [
+    {"id": "photosynthesis", "text": "Plants capture sunlight with chlorophyll and use that energy to turn carbon dioxide and water into sugar, releasing oxygen as a by-product."},
+    {"id": "tcp", "text": "Before two computers exchange data over TCP, they perform a three-step handshake in which each side confirms that the other is ready to send and receive."},
+    {"id": "sourdough", "text": "A sourdough starter is a living culture of wild yeast and bacteria; feeding it flour and water regularly keeps it active enough to make bread rise."},
+    {"id": "blackhole", "text": "A black hole is a region of space where gravity is so strong that nothing, not even light, can escape once it crosses the event horizon."},
+    {"id": "aqueduct", "text": "Roman engineers moved water to cities over long distances using aqueducts, relying on a gentle downhill slope so gravity did all the work."},
+    {"id": "vaccine", "text": "A vaccine trains the immune system by showing it a harmless piece of a germ, so the body can recognise and fight the real infection faster later."},
+    {"id": "interest", "text": "With compound interest, the earnings from an investment are added to the principal, so each following period grows from a larger base."},
+    {"id": "tides", "text": "Ocean tides rise and fall mainly because the moon's gravitational pull tugs on the water, creating bulges on the near and far sides of the Earth."},
+    {"id": "coffee", "text": "Roasting coffee beans longer produces a darker colour and a more bitter, smoky taste, while light roasts keep more of the bean's original acidity."},
+    {"id": "binarysearch", "text": "Binary search finds an item in a sorted list by repeatedly comparing it with the middle element and discarding the half that cannot contain it."},
+    {"id": "monsoon", "text": "A monsoon is a seasonal reversal of wind direction that brings heavy rainfall to South Asia in summer after months of dry weather."},
+    {"id": "bees", "text": "Honeybees communicate the direction and distance of food by performing a waggle dance inside the hive for their nestmates."}
+  ],
+  "queries": [
+    {"lang": "en", "text": "How do green plants make food from light?", "relevant": "photosynthesis"},
+    {"lang": "en", "text": "What does the connection setup between two networked machines look like?", "relevant": "tcp"},
+    {"lang": "en", "text": "How do I keep the fermented dough culture for baking alive?", "relevant": "sourdough"},
+    {"lang": "en", "text": "Why can't anything escape from a collapsed star's pull?", "relevant": "blackhole"},
+    {"lang": "en", "text": "How did ancient Romans deliver water to towns?", "relevant": "aqueduct"},
+    {"lang": "en", "text": "Why does a shot prepare the body against a disease?", "relevant": "vaccine"},
+    {"lang": "en", "text": "Why do savings grow faster when profits are reinvested?", "relevant": "interest"},
+    {"lang": "en", "text": "What makes the sea level go up and down every day?", "relevant": "tides"},
+    {"lang": "en", "text": "How does the darkness of a roast change the flavour?", "relevant": "coffee"},
+    {"lang": "en", "text": "What is a fast way to look up a value in an ordered array?", "relevant": "binarysearch"},
+    {"lang": "en", "text": "Why does it pour every summer in India?", "relevant": "monsoon"},
+    {"lang": "en", "text": "How does an insect tell its colony where flowers are?", "relevant": "bees"},
+    {"lang": "zh", "text": "植物是怎样利用阳光制造养分的？", "relevant": "photosynthesis"},
+    {"lang": "zh", "text": "两台电脑建立连接时要经过哪几步确认？", "relevant": "tcp"},
+    {"lang": "zh", "text": "怎样养护用来做面包的天然发酵菌种？", "relevant": "sourdough"},
+    {"lang": "zh", "text": "为什么连光都无法逃出黑洞？", "relevant": "blackhole"},
+    {"lang": "zh", "text": "古罗马人是如何把水送到城市的？", "relevant": "aqueduct"},
+    {"lang": "zh", "text": "疫苗为什么能让身体提前做好防御？", "relevant": "vaccine"},
+    {"lang": "zh", "text": "复利为什么会让资产越滚越大？", "relevant": "interest"},
+    {"lang": "zh", "text": "海水为什么会涨潮和退潮？", "relevant": "tides"},
+    {"lang": "zh", "text": "咖啡豆烘焙得越深，味道会有什么变化？", "relevant": "coffee"},
+    {"lang": "zh", "text": "在有序列表中怎样快速查找一个元素？", "relevant": "binarysearch"},
+    {"lang": "zh", "text": "为什么南亚夏天会下大雨？", "relevant": "monsoon"},
+    {"lang": "zh", "text": "蜜蜂是如何告诉同伴花蜜在哪里的？", "relevant": "bees"}
+  ]
+}
