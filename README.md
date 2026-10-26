@@ -1,5 +1,7 @@
 # LinguaSearch
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 **Your documents. Your language. Answers you can trace.**
 
 A portfolio-ready full-stack document search and retrieval-augmented question-answering workspace. Built with React, TypeScript, FastAPI, and SQLite. Start without a model key, then connect OpenAI for multilingual semantic retrieval and grounded answers.
