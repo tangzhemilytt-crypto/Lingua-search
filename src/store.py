@@ -85,6 +85,7 @@ class Store:
         sample=False,
         embeddings=None,
         model=None,
+        page_count=None,
     ):
         doc_id = uuid4().hex
         rows = [
@@ -114,7 +115,7 @@ class Store:
                     title,
                     filename,
                     len(pdf or b""),
-                    max(p for p, _ in pages),
+                    page_count if page_count is not None else max(p for p, _ in pages),
                     datetime.now(timezone.utc).isoformat(),
                     int(sample),
                     digest,

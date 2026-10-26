@@ -211,13 +211,14 @@ def create_app(settings=None, provider=None):
                     parsed = json.loads(result.stdout)
                     if "error" in parsed:
                         raise HTTPException(400, parsed["error"])
-                    return parsed["chunks"]
+                    return parsed
                 except (subprocess.TimeoutExpired, json.JSONDecodeError):
                     raise HTTPException(
                         400, "PDF could not be processed within the safe parsing limit."
                     )
 
-            chunks = await run_in_threadpool(parse)
+            parsed = await run_in_threadpool(parse)
+            chunks = parsed["chunks"]
             digest = hashlib.sha256(content).hexdigest()
             with store.db() as db:
                 if db.execute(
@@ -237,6 +238,7 @@ def create_app(settings=None, provider=None):
                     chunks,
                     digest,
                     content,
+                    page_count=parsed["pages"],
                     embeddings=vectors,
                     model=settings.embedding_model if vectors else None,
                 )

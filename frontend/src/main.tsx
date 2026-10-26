@@ -303,7 +303,13 @@ function App() {
               Built for curious minds <ArrowUpRight size={13} />
             </span>
           </div>
-          <button className="settings-button" onClick={() => setSettings(true)}>
+          <button
+            className="settings-button"
+            onClick={() => {
+              setSettings(true);
+              setMobile(false);
+            }}
+          >
             <Settings size={18} />
             Settings & connection
             <span className={`dot ${live ? "live" : ""}`} />
@@ -360,7 +366,14 @@ function App() {
                 <X size={16} />
               </button>
               {config?.auth_required && (
-                <button onClick={() => setSettings(true)}>Open Settings</button>
+                <button
+                  onClick={() => {
+                    setSettings(true);
+                    setMobile(false);
+                  }}
+                >
+                  Open Settings
+                </button>
               )}
             </div>
           )}

@@ -1856,3 +1856,18 @@ h1 {
     transition: none !important;
   }
 }
+
+/* Keep every navigation action reachable on short mobile viewports. */
+.sidebar {
+  overflow-y: auto;
+}
+.sidebar > .brand,
+.sidebar > .workspace,
+.sidebar > nav,
+.sidebar-bottom {
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .sidebar { visibility: hidden; }
+  .sidebar.mobile-open { visibility: visible; }
+}

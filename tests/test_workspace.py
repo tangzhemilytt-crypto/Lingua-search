@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from src.app import create_app
@@ -309,3 +309,15 @@ def test_page_limit(client):
     output = io.BytesIO()
     writer.write(output)
     assert upload(client, output.getvalue()).status_code == 400
+
+
+def test_page_count_includes_blank_trailing_pages(client):
+    writer = PdfWriter()
+    writer.append(PdfReader(io.BytesIO(pdf_bytes())))
+    writer.add_blank_page(width=612, height=792)
+    output = io.BytesIO()
+    writer.write(output)
+    response = upload(client, output.getvalue())
+    assert response.status_code == 201
+    assert response.json()["pages"] == 2
+    assert response.json()["chunks"] == 1

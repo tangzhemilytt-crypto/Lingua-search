@@ -26,7 +26,7 @@ def extract(content):
                 chunks.append((number, passage))
     if not chunks:
         raise ValueError("No readable text found. Scanned PDFs need OCR before upload.")
-    return chunks
+    return {"chunks": chunks, "pages": len(reader.pages)}
 
 
 if __name__ == "__main__":
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             resource.setrlimit(resource.RLIMIT_CPU, (15, 15))
         except (ImportError, ValueError, OSError):
             pass
-        print(json.dumps({"chunks": extract(sys.stdin.buffer.read())}))
+        print(json.dumps(extract(sys.stdin.buffer.read())))
     except Exception as exc:
         print(json.dumps({"error": str(exc)[:240]}))
         sys.exit(1)
