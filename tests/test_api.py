@@ -1,4 +1,7 @@
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 import unittest
 
 from fastapi.testclient import TestClient
@@ -128,6 +131,101 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+    def test_upload_pdf(self):
+        with TemporaryDirectory() as temp_dir:
+            with patch(
+                "src.documents.UPLOAD_DIR",
+                Path(temp_dir)
+            ):
+                response = client.post(
+                    "/documents",
+                    files={
+                        "file": (
+                            "paper.pdf",
+                            b"%PDF-1.4\nTest PDF content",
+                            "application/pdf"
+                        )
+                    }
+                )
+
+                self.assertEqual(response.status_code, 201)
+
+                body = response.json()
+                self.assertEqual(body["filename"], "paper.pdf")
+                self.assertEqual(body["status"], "uploaded")
+
+                saved_file = (
+                    Path(temp_dir) /
+                    f"{body['document_id']}.pdf"
+                )
+
+                self.assertTrue(saved_file.exists())
+                self.assertEqual(
+                    saved_file.read_bytes(),
+                    b"%PDF-1.4\nTest PDF content"
+                )
+
+    
+    def test_document_lifecycle(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+
+        with TemporaryDirectory() as temp_dir:
+            with patch(
+                "src.documents.UPLOAD_DIR",
+                Path(temp_dir)
+            ):
+                # CREATE
+                upload_response = client.post(
+                    "/documents",
+                    files={
+                        "file": (
+                            "paper.pdf",
+                            b"%PDF-1.4\nTest content",
+                            "application/pdf"
+                        )
+                    }
+                )
+
+                self.assertEqual(
+                    upload_response.status_code, 201
+                )
+
+                document_id = upload_response.json()["document_id"]
+
+                # READ ALL
+                list_response = client.get("/documents")
+                self.assertEqual(list_response.status_code, 200)
+                self.assertEqual(
+                    len(list_response.json()["documents"]), 1
+                )
+
+                # READ ONE
+                get_response = client.get(
+                    f"/documents/{document_id}"
+                )
+                self.assertEqual(get_response.status_code, 200)
+                self.assertEqual(
+                    get_response.json()["filename"],
+                    "paper.pdf"
+                )
+
+                # DELETE
+                delete_response = client.delete(
+                    f"/documents/{document_id}"
+                )
+                self.assertEqual(
+                    delete_response.status_code, 200
+                )
+
+                # CONFIRM DELETION
+                final_response = client.get(
+                    f"/documents/{document_id}"
+                )
+                self.assertEqual(
+                    final_response.status_code, 404
+                )
 
 if __name__ == "__main__":
     unittest.main()

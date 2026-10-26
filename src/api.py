@@ -1,4 +1,11 @@
 
+from fastapi import UploadFile
+from src.documents import (
+    save_document,
+    list_documents,
+    get_document,
+    delete_document,
+)
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -89,3 +96,24 @@ def post_search_all(request: SearchRequest):
         "count": len(results),
         "results": results
     }
+
+@app.post("/documents", status_code=201)
+async def upload_document(file: UploadFile):
+    return await save_document(file)
+
+
+@app.get("/documents")
+def get_documents():
+    return {
+        "documents": list_documents()
+    }
+
+
+@app.get("/documents/{document_id}")
+def get_document_by_id(document_id: str):
+    return get_document(document_id)
+
+
+@app.delete("/documents/{document_id}")
+def remove_document(document_id: str):
+    return delete_document(document_id)
