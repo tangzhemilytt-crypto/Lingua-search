@@ -78,8 +78,25 @@ class Provider:
                     raise HTTPException(429, "Model quota or rate limit reached. Wait and try again. No other provider was called.")
                 response.raise_for_status()
                 return response.json()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            # Allowlist diagnostic codes only. Never echo upstream messages, URLs,
+            # request headers, API keys, project identifiers, or document contents.
+            allowed = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED",
+                       "API_KEY_HTTP_REFERRER_BLOCKED", "SERVICE_DISABLED", "CONSUMER_INVALID",
+                       "BILLING_DISABLED", "PERMISSION_DENIED", "NOT_FOUND", "INVALID_ARGUMENT"}
+            reasons = []
+            try:
+                error = exc.response.json().get("error", {})
+                candidates = [error.get("status")] + [d.get("reason") for d in error.get("details", []) if isinstance(d, dict)]
+                reasons = sorted({r for r in candidates if isinstance(r,str) and r in allowed})
+            except (ValueError, AttributeError, TypeError):
+                pass
+            hint = ", ".join(reasons)
+            diagnostic = f" ({hint})" if hint else ""
+            raise HTTPException(502, f"{self.settings.provider.title()} returned HTTP {status}{diagnostic}. Check the API key permissions and model availability. No other provider was called.")
         except (httpx.HTTPError, ValueError):
-            raise HTTPException(502, "Model provider unavailable. Check the server API key, quota, and model settings.")
+            raise HTTPException(502, "Model provider connection failed. Check network access and try again. No other provider was called.")
 
     def post(self, endpoint, body):
         if self.settings.provider == "gemini":

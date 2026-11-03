@@ -121,3 +121,13 @@ def test_gemini_reindexes_incompatible_openai_vectors(tmp_path):
     assert store.chunks()[0]['embedding_model'] == config.embedding_cache_key
     retrieve(store,fake,config,'身份',[],5)
     assert len(fake.calls)==3 # cached passages reused
+
+
+@pytest.mark.parametrize("status,reason", [(400,"API_KEY_INVALID"),(403,"SERVICE_DISABLED"),(404,"NOT_FOUND")])
+def test_safe_provider_diagnostics_never_echo_secrets(tmp_path, monkeypatch, status, reason):
+    reply={"error":{"status":"INVALID_ARGUMENT","message":"secret-key and private document text", "details":[{"reason":reason,"metadata":{"consumer":"private-project"}}]}}
+    intercept(monkeypatch,lambda request:httpx.Response(status,json=reply))
+    with pytest.raises(HTTPException) as error:Provider(settings(tmp_path)).embed(['Test'])
+    assert f"HTTP {status}" in error.value.detail and reason in error.value.detail
+    assert 'secret-key' not in error.value.detail and 'private-project' not in error.value.detail
+    assert 'private document text' not in error.value.detail
