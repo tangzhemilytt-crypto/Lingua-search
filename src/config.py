@@ -11,9 +11,11 @@ class Settings:
     token: str = os.getenv("WORKSPACE_TOKEN", "")
     provider: str = os.getenv("AI_PROVIDER", "openai").lower()
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_chat_model: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash-lite")
+    gemini_chat_model: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-3.5-flash-lite")
     gemini_embedding_model: str = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
     max_model_requests_per_day: int = int(os.getenv("MAX_MODEL_REQUESTS_PER_DAY", "50"))
+    public_demo_enabled: bool = os.getenv("PUBLIC_DEMO_ENABLED", "true").lower() == "true"
+    max_demo_model_requests_per_day: int = int(os.getenv("MAX_DEMO_MODEL_REQUESTS_PER_DAY", "12"))
     api_key: str = os.getenv("OPENAI_API_KEY", "")
     chat_model: str = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini")
     embedding_model: str = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
@@ -25,6 +27,8 @@ class Settings:
     )
 
     def __post_init__(self):
+        if self.max_demo_model_requests_per_day < 1:
+            raise ValueError("MAX_DEMO_MODEL_REQUESTS_PER_DAY must be positive.")
         if self.provider not in {"openai", "gemini"}:
             raise ValueError("AI_PROVIDER must be openai or gemini.")
         if self.max_model_requests_per_day < 1:

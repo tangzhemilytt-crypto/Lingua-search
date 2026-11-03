@@ -80,11 +80,11 @@ Limits: 100 documents, 5,000 passages total, 100 pages and 300,000 extracted cha
 
 ## Free-quota AI option: Gemini
 
-The app supports Gemini embeddings and answer generation as an explicit alternative to OpenAI. See Google's [pricing](https://ai.google.dev/gemini-api/docs/pricing), [API key setup](https://ai.google.dev/gemini-api/docs/api-key), and [embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings). Free quotas vary by account, model, region, and date. As checked on November 2, 2026, the standard tiers for `gemini-2.5-flash-lite` and `gemini-embedding-001` list free usage. This is not an unlimited or permanent free-service guarantee.
+The app supports Gemini embeddings and answer generation as an explicit alternative to OpenAI. See Google's [pricing](https://ai.google.dev/gemini-api/docs/pricing), [API key setup](https://ai.google.dev/gemini-api/docs/api-key), and [embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings). Free quotas vary by account, model, region, and date. As checked on November 2, 2026, the standard tiers for `gemini-3.5-flash-lite` and `gemini-embedding-001` list free usage. This is not an unlimited or permanent free-service guarantee.
 
 1. Create a Gemini API key in Google AI Studio in an eligible **Free-tier project without paid billing**. Do not enable paid billing for this demo. If the account is ineligible or has no free quota, stop rather than upgrade automatically.
 2. In Render → lingua-search → Environment, add `AI_PROVIDER=gemini` and `GEMINI_API_KEY` with your key. Keep `WORKSPACE_TOKEN` unchanged. Leave `OPENAI_API_KEY` empty.
-3. Optionally set `MAX_MODEL_REQUESTS_PER_DAY=50` (the default). Defaults are `GEMINI_CHAT_MODEL=gemini-2.5-flash-lite` and `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`.
+3. Optionally set `MAX_MODEL_REQUESTS_PER_DAY=50` (the default). Defaults are `GEMINI_CHAT_MODEL=gemini-3.5-flash-lite` and `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`.
 4. Select **Save and deploy**. The public configuration endpoint reports the configured provider, never the key. “AI configured” only means a key is present, not that its permissions or quota have been verified.
 5. Test with a small synthetic English PDF and a Chinese question. Confirm the response and source-page citation. Live provider validation requires your own key; CI uses HTTP doubles.
 
@@ -95,3 +95,31 @@ The default cap allows 50 outbound model HTTP requests per UTC day across both p
 Gemini vectors use 768 dimensions to limit memory usage on the free instance. Their cache identity includes provider, model, dimension, and task type; switching from OpenAI triggers reindexing rather than mixing incompatible vectors.
 
 **Privacy:** Google's Free tier may use submitted content to improve products. Extracted PDF passages are sent for embedding; questions and retrieved evidence are sent for answers. Only upload non-sensitive demo material. With no selected provider key, the app makes no model calls.
+
+Live setup note: Google rejected `gemini-2.5-flash-lite` for new accounts with HTTP 404 even though it appeared in the model catalog. The default is now `gemini-3.5-flash-lite`. The protected API surfaces only safe HTTP/reason codes for diagnosis, never upstream error messages or credentials. Recheck model availability and free-tier pricing before changing models.
+
+Gemini answer output uses a structured claims schema: each claim supplies text and nonempty retrieved evidence IDs. The server validates those IDs and renders inline markers deterministically. Truncated, malformed, or unsupported citations are rejected. This validates source identity and formatting, not factual entailment. A live synthetic English-to-Chinese answer with citation 1 was verified during setup; production API keys remain outside the repository.
+
+## Shareable public demo and private workspace
+
+Anonymous visitors now land in a **read-only public demo** with three curated sample documents. The demo corpus and its cache live in a separate SQLite file (`DATABASE_PATH` + `.public-demo`). Public routes never query private document tables. Knowing a private document ID, using the same filename, or sending an owner token to a demo endpoint does not grant access to private data there.
+
+| Audience | Routes | Access |
+| --- | --- | --- |
+| Everyone | `GET /api/demo/documents`, `GET /api/demo/documents/{id}` | Curated sample metadata and original passage text only. |
+| Everyone | `POST /api/demo/search`, `POST /api/demo/ask` | Search/answers scoped exclusively to those samples. |
+| Owner token holders | Existing `/api/documents`, `/api/search`, `/api/ask` | Private uploads, downloads, management, search, and answers. |
+
+There are no public upload, rename, delete, or PDF-download endpoints. Production still requires a strong `WORKSPACE_TOKEN`. The browser defaults to the public demo without a token; owner login unlocks private tools. Invalid saved tokens return to the demo instead of blocking it. Signing out clears private document context; late private requests cannot populate the public view.
+
+Defaults:
+
+- `PUBLIC_DEMO_ENABLED=true`: enables the separate sample demo. Set `false` to disable public API routes.
+- `MAX_DEMO_MODEL_REQUESTS_PER_DAY=12`: maximum outbound model HTTP calls made by the public demo per UTC day, also counting toward the existing global `MAX_MODEL_REQUESTS_PER_DAY` (default 50). One question can require more than one call.
+- Up to 100 successful public AI search/answer results are cached by request, corpus, provider, and models. Repeated suggested questions use no new model calls. Private answers are not stored in this public cache.
+- Public provider quota/errors fall back to explicitly labeled keyword excerpts. Cached AI answers remain usable without new generation. No paid-provider fallback is added.
+- Public read/request rate limit: 120 requests/minute per socket IP. Behind a proxy, visitors may share that bucket. Existing single-operation locking prevents concurrent indexing/generation from amplifying costs.
+
+These counters and caches are not permanent on Render Free: sleep/redeploy/restart can erase both SQLite files. Provider quotas and project billing remain the authoritative usage controls. Keep the Gemini project on an eligible Free tier without paid billing. User questions entered in public AI mode are sent to the configured provider; the UI advises non-sensitive questions. Private documents are never retrieved or sent by public queries.
+
+Share the ordinary home URL with interviewers. Do **not** share `WORKSPACE_TOKEN` or a model API key. To access personal uploads yourself, choose **Private workspace** and enter the workspace token in Settings. To return to the public view, choose **Sign out to public demo**.

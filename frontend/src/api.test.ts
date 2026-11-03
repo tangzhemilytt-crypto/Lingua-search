@@ -60,3 +60,11 @@ describe("workspace API client", () => {
     await expect(api("/documents")).rejects.toThrow("502");
   });
 });
+
+it("does not attach the private workspace token to public demo requests", async () => {
+  sessionStorage.setItem("lingua-token", "private-token");
+  const fetch = vi.fn().mockResolvedValue({ok:true,json:async()=>({documents:[]})});
+  vi.stubGlobal("fetch", fetch);
+  await api("/demo/documents");
+  expect(fetch.mock.calls[0][1].headers.has("Authorization")).toBe(false);
+});

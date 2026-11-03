@@ -55,8 +55,9 @@ def cosine(a, b):
 
 
 class Provider:
-    def __init__(self, settings):
+    def __init__(self, settings, scope="private"):
         self.settings = settings
+        self.scope = scope
 
     def _reserve_request(self):
         # Shared across workers/restarts while this SQLite database survives.
@@ -67,6 +68,13 @@ class Provider:
             count = int(row[0]) if row else 0
             if count >= self.settings.max_model_requests_per_day:
                 raise HTTPException(429, "Workspace daily AI request limit reached. Try tomorrow; offline search is still available by disabling the model key.")
+            if self.scope == "demo":
+                demo_key = "demo-" + key
+                demo_row = db.execute("SELECT value FROM metadata WHERE key=?", (demo_key,)).fetchone()
+                demo_count = int(demo_row[0]) if demo_row else 0
+                if demo_count >= self.settings.max_demo_model_requests_per_day:
+                    raise HTTPException(429, "Public AI allowance reached. Sample reading and keyword search remain available.")
+                db.execute("INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (demo_key,str(demo_count+1)))
             db.execute("INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key,str(count+1)))
 
     def _request(self, url, headers, body):
@@ -78,8 +86,25 @@ class Provider:
                     raise HTTPException(429, "Model quota or rate limit reached. Wait and try again. No other provider was called.")
                 response.raise_for_status()
                 return response.json()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            # Allowlist diagnostic codes only. Never echo upstream messages, URLs,
+            # request headers, API keys, project identifiers, or document contents.
+            allowed = {"API_KEY_INVALID", "API_KEY_EXPIRED", "API_KEY_SERVICE_BLOCKED",
+                       "API_KEY_HTTP_REFERRER_BLOCKED", "SERVICE_DISABLED", "CONSUMER_INVALID",
+                       "BILLING_DISABLED", "PERMISSION_DENIED", "NOT_FOUND", "INVALID_ARGUMENT"}
+            reasons = []
+            try:
+                error = exc.response.json().get("error", {})
+                candidates = [error.get("status")] + [d.get("reason") for d in error.get("details", []) if isinstance(d, dict)]
+                reasons = sorted({r for r in candidates if isinstance(r,str) and r in allowed})
+            except (ValueError, AttributeError, TypeError):
+                pass
+            hint = ", ".join(reasons)
+            diagnostic = f" ({hint})" if hint else ""
+            raise HTTPException(502, f"{self.settings.provider.title()} returned HTTP {status}{diagnostic}. Check the API key permissions and model availability. No other provider was called.")
         except (httpx.HTTPError, ValueError):
-            raise HTTPException(502, "Model provider unavailable. Check the server API key, quota, and model settings.")
+            raise HTTPException(502, "Model provider connection failed. Check network access and try again. No other provider was called.")
 
     def post(self, endpoint, body):
         if self.settings.provider == "gemini":
@@ -100,18 +125,53 @@ class Provider:
             except (KeyError, TypeError):
                 raise HTTPException(502,"The model returned invalid embeddings. Please try again.")
         system, user = body["messages"]
+        context = json.loads(user["content"])["evidence"]
+        valid_ids = {item["id"] for item in context}
+        # The model returns evidence IDs per claim. Only the server formats
+        # inline markers, rather than relying on prose-formatting compliance.
+        schema = {
+            "type":"OBJECT",
+            "properties":{
+                "claims":{"type":"ARRAY","items":{
+                    "type":"OBJECT",
+                    "properties":{"text":{"type":"STRING"},
+                                  "citation_ids":{"type":"ARRAY","items":{"type":"INTEGER"}}},
+                    "required":["text","citation_ids"]}},
+                "insufficiency":{"type":"STRING"}},
+            "required":["claims","insufficiency"]}
+        instruction = system["content"] + (
+            " Output-format override: return claims (an array of supported claims) and insufficiency (a string). "
+            "Each claim must have text and citation_ids using only the provided evidence IDs. "
+            "Do not write bracket citations in text; the server adds them. "
+            "Keep each claim concise. If evidence is insufficient return claims=[] and explain in insufficiency. "
+            "For supported claims return insufficiency as an empty string.")
         data = self._request(base+quote(self.settings.chat_model, safe="")+":generateContent", headers, {
-            "systemInstruction":{"parts":[{"text":system["content"]}]},
+            "systemInstruction":{"parts":[{"text":instruction}]},
             "contents":[{"role":"user","parts":[{"text":user["content"]}]}],
-            "generationConfig":{"temperature":0.2,"maxOutputTokens":900,"responseMimeType":"application/json"}})
+            "generationConfig":{"temperature":0.2,"maxOutputTokens":1200,
+                                "responseMimeType":"application/json","responseSchema":schema}})
         try:
             candidate = data["candidates"][0]
             if candidate.get("finishReason") != "STOP":
                 raise ValueError()
             text = "".join(part.get("text","") for part in candidate["content"]["parts"] if not part.get("thought"))
-            return {"choices":[{"message":{"content":text}}]}
+            result = json.loads(text)
+            claims = result["claims"]
+            if not isinstance(claims,list) or len(claims)>12 or not isinstance(result["insufficiency"],str):
+                raise ValueError()
+            rendered, cited = [], set()
+            for claim in claims:
+                claim_text, ids = claim["text"], claim["citation_ids"]
+                if (not isinstance(claim_text,str) or not claim_text.strip() or len(claim_text)>4000
+                    or re.search(r"\[\d+\]",claim_text) or not isinstance(ids,list) or not ids
+                    or any(type(i) is not int or i not in valid_ids for i in ids)):
+                    raise ValueError()
+                cited.update(ids)
+                rendered.append(claim_text.strip()+" "+" ".join(f"[{i}]" for i in sorted(set(ids))))
+            answer = "\n\n".join(rendered) if claims else result["insufficiency"]
+            return {"choices":[{"message":{"content":json.dumps({"answer":answer,"citation_ids":sorted(cited)})}}]}
         except (KeyError, IndexError, TypeError, ValueError):
-            raise HTTPException(502, "The model could not produce a complete supported answer. Try a different question.")
+            raise HTTPException(502, "The model returned an incomplete answer or invalid evidence IDs. Please try again.")
 
     def embed(self, texts):
         # Modest batches avoid oversized provider requests for long PDFs.
@@ -255,3 +315,35 @@ def retrieve(store, provider, settings, query, ids, limit):
         for r in ranked
         if r["score"] > (0.18 if settings.api_key else 0)
     ][:limit]
+
+
+def build_answer(body, sources, provider, settings, public_demo=False):
+    if not sources:
+        return {
+            "answer": ("No supporting passages found. Try another question or sample document." if public_demo else "No supporting passages found. Try another question or upload a relevant document."),
+            "citations": [],
+            "mode": "ai" if settings.api_key else "demo",
+        }
+    if settings.api_key:
+        answer, ids = provider.answer(
+            body.query,
+            sources,
+            "the same language as the question"
+            if body.language == "Auto"
+            else body.language,
+        )
+        if not ids:
+            answer = "The retrieved passages do not provide enough evidence to answer this question."
+    else:
+        answer = (
+            ("Public evidence preview — keyword-matched original excerpts, not an AI-generated answer.\n\n" if public_demo else "Offline evidence preview — these are matching excerpts, not an AI-generated answer. Enable a model API key on the server for cross-language semantic retrieval and synthesized answers.\n\n")
+            + "\n\n".join(
+                f"“{r['text']}” [{i + 1}]" for i, r in enumerate(sources[:3])
+            )
+        )
+        ids = list(range(1, min(len(sources), 3) + 1))
+    return {
+        "answer": answer,
+        "citations": [{"number": i, **sources[i - 1]} for i in sorted(set(ids))],
+        "mode": "ai" if settings.api_key else "demo",
+    }

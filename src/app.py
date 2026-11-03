@@ -11,17 +11,17 @@ import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from src.config import Settings
-from src.rag import Provider, retrieve
+from src.rag import Provider, retrieve, build_answer
+from src.schemas import Query, Question, Rename
+from src.public_demo import create_demo_router
 from src.store import Store
 
 
@@ -45,37 +45,7 @@ class BodyLimit:
         await self.app(scope, bounded_receive, send)
 
 
-class Query(BaseModel):
-    query: str = Field(min_length=1, max_length=1500)
-    document_ids: list[str] = Field(default_factory=list, max_length=100)
-    limit: int = Field(default=5, ge=1, le=10)
-
-    @field_validator("query")
-    @classmethod
-    def nonblank(cls, value):
-        if not value.strip():
-            raise ValueError("Please enter a question or search term.")
-        return value.strip()
-
-
-class Question(Query):
-    language: Literal["Auto", "English", "中文", "Español", "Français", "日本語"] = (
-        "Auto"
-    )
-
-
-class Rename(BaseModel):
-    title: str = Field(min_length=1, max_length=160)
-
-    @field_validator("title")
-    @classmethod
-    def nonblank(cls, value):
-        if not value.strip():
-            raise ValueError("Title cannot be blank.")
-        return value.strip()
-
-
-def create_app(settings=None, provider=None):
+def create_app(settings=None, provider=None, demo_provider=None):
     settings = settings or Settings()
     if settings.production and len(settings.token) < 32:
         raise RuntimeError(
@@ -173,8 +143,11 @@ def create_app(settings=None, provider=None):
             "auth_required": bool(settings.token),
             "max_upload_mb": settings.max_upload_mb,
             "embedding_model": settings.embedding_model if settings.api_key else None,
+            "chat_model": settings.chat_model if settings.api_key else None,
             "provider": settings.provider if settings.api_key else None,
             "max_model_requests_per_day": settings.max_model_requests_per_day,
+            "public_demo_enabled": settings.public_demo_enabled,
+            "max_demo_model_requests_per_day": settings.max_demo_model_requests_per_day,
         }
 
     @app.get("/api/documents", dependencies=secure)
@@ -308,36 +281,14 @@ def create_app(settings=None, provider=None):
 
     @app.post("/api/ask", dependencies=busy)
     def ask(body: Question):
-        sources = find(body)
-        if not sources:
-            return {
-                "answer": "No supporting passages found. Try another question or upload a relevant document.",
-                "citations": [],
-                "mode": "ai" if settings.api_key else "demo",
-            }
-        if settings.api_key:
-            answer, ids = provider.answer(
-                body.query,
-                sources,
-                "the same language as the question"
-                if body.language == "Auto"
-                else body.language,
-            )
-            if not ids:
-                answer = "The retrieved passages do not provide enough evidence to answer this question."
-        else:
-            answer = (
-                "Offline evidence preview — these are matching excerpts, not an AI-generated answer. Enable a model API key on the server for cross-language semantic retrieval and synthesized answers.\n\n"
-                + "\n\n".join(
-                    f"“{r['text']}” [{i + 1}]" for i, r in enumerate(sources[:3])
-                )
-            )
-            ids = list(range(1, min(len(sources), 3) + 1))
-        return {
-            "answer": answer,
-            "citations": [{"number": i, **sources[i - 1]} for i in sorted(set(ids))],
-            "mode": "ai" if settings.api_key else "demo",
-        }
+        return build_answer(body, find(body), provider, settings)
+
+    if settings.public_demo_enabled:
+        demo_store = Store(settings.database_path + ".public-demo")
+        demo_store.seed()
+        app.state.demo_store = demo_store
+        app.include_router(create_demo_router(
+            settings, demo_store, demo_provider or Provider(settings, scope="demo"), operations))
 
     dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if dist.is_dir():

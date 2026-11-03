@@ -53,14 +53,14 @@ def test_gemini_embeddings_use_header_not_url_and_small_vectors(tmp_path, monkey
 def test_gemini_answer_keeps_page_citations_and_language(tmp_path, monkeypatch):
     config = settings(tmp_path)
     def handler(request):
-        assert request.url.path.endswith('/gemini-2.5-flash-lite:generateContent')
+        assert request.url.path.endswith('/gemini-3.5-flash-lite:generateContent')
         body = json.loads(request.content)
         assert '中文' in body['systemInstruction']['parts'][0]['text']
         assert body['generationConfig']['responseMimeType'] == 'application/json'
         assert 'tools' not in body # No paid search grounding, caching, or other extra tools.
         evidence = json.loads(body['contents'][0]['parts'][0]['text'])['evidence']
         assert evidence[0]['page'] == 3
-        return httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':json.dumps({'answer':'语言塑造身份。 [1]','citation_ids':[1]})}]}}]})
+        return httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':json.dumps({'claims':[{'text':'语言塑造身份。','citation_ids':[1]}],'insufficiency':''})}]}}]})
     intercept(monkeypatch,handler)
     assert Provider(config).answer('语言与身份？',[{'title':'Paper','page':3,'text':'Language shapes identity.'}],'中文') == ('语言塑造身份。 [1]',[1])
 
@@ -121,3 +121,27 @@ def test_gemini_reindexes_incompatible_openai_vectors(tmp_path):
     assert store.chunks()[0]['embedding_model'] == config.embedding_cache_key
     retrieve(store,fake,config,'身份',[],5)
     assert len(fake.calls)==3 # cached passages reused
+
+
+@pytest.mark.parametrize("status,reason", [(400,"API_KEY_INVALID"),(403,"SERVICE_DISABLED"),(404,"NOT_FOUND")])
+def test_safe_provider_diagnostics_never_echo_secrets(tmp_path, monkeypatch, status, reason):
+    reply={"error":{"status":"INVALID_ARGUMENT","message":"secret-key and private document text", "details":[{"reason":reason,"metadata":{"consumer":"private-project"}}]}}
+    intercept(monkeypatch,lambda request:httpx.Response(status,json=reply))
+    with pytest.raises(HTTPException) as error:Provider(settings(tmp_path)).embed(['Test'])
+    assert f"HTTP {status}" in error.value.detail and reason in error.value.detail
+    assert 'secret-key' not in error.value.detail and 'private-project' not in error.value.detail
+    assert 'private document text' not in error.value.detail
+
+
+def test_claim_format_rejects_unsupported_evidence_ids(tmp_path, monkeypatch):
+    payload={"claims":[{"text":"Unsupported claim", "citation_ids":[99]}],"insufficiency":""}
+    reply={"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":json.dumps(payload)}]}}]}
+    intercept(monkeypatch,lambda request:httpx.Response(200,json=reply))
+    with pytest.raises(HTTPException):Provider(settings(tmp_path)).answer('Question',[{'title':'Paper','page':1,'text':'Evidence'}],'English')
+
+
+def test_claim_format_can_abstain_without_fabricating_sources(tmp_path, monkeypatch):
+    payload={"claims":[],"insufficiency":"Insufficient evidence."}
+    reply={"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":json.dumps(payload)}]}}]}
+    intercept(monkeypatch,lambda request:httpx.Response(200,json=reply))
+    assert Provider(settings(tmp_path)).answer('Question',[{'title':'Paper','page':1,'text':'Evidence'}],'English') == ('Insufficient evidence.',[])
