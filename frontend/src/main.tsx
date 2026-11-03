@@ -994,7 +994,7 @@ function App() {
             <p>
               For Gemini free-tier access, set AI_PROVIDER=gemini and GEMINI_API_KEY in the server environment. OpenAI uses AI_PROVIDER=openai and OPENAI_API_KEY. Redeploy after changing settings. Never paste a model API key into this browser.
             </p>
-            {live && <small>Provider: {config?.provider || 'openai'} · Embeddings: {config?.embedding_model}</small>}
+            {live && <small>Provider: {config?.provider || 'openai'} · Answers: {config?.chat_model} · Embeddings: {config?.embedding_model}</small>}
             <small>Free model quotas depend on your provider account. Keep a free-tier project without paid billing for free usage. Google may use free-tier content to improve its products; use non-sensitive demo files.</small>
             <small>The server caps provider requests at {config?.max_model_requests_per_day || 50} per UTC day. Free hosting restarts can reset this counter and remove uploaded documents. Provider selection never falls back to another service.</small>
           </div>

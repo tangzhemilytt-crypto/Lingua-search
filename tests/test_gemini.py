@@ -53,7 +53,7 @@ def test_gemini_embeddings_use_header_not_url_and_small_vectors(tmp_path, monkey
 def test_gemini_answer_keeps_page_citations_and_language(tmp_path, monkeypatch):
     config = settings(tmp_path)
     def handler(request):
-        assert request.url.path.endswith('/gemini-2.5-flash-lite:generateContent')
+        assert request.url.path.endswith('/gemini-3.5-flash-lite:generateContent')
         body = json.loads(request.content)
         assert '中文' in body['systemInstruction']['parts'][0]['text']
         assert body['generationConfig']['responseMimeType'] == 'application/json'

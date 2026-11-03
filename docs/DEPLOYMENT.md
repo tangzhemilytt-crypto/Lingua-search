@@ -80,11 +80,11 @@ Limits: 100 documents, 5,000 passages total, 100 pages and 300,000 extracted cha
 
 ## Free-quota AI option: Gemini
 
-The app supports Gemini embeddings and answer generation as an explicit alternative to OpenAI. See Google's [pricing](https://ai.google.dev/gemini-api/docs/pricing), [API key setup](https://ai.google.dev/gemini-api/docs/api-key), and [embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings). Free quotas vary by account, model, region, and date. As checked on November 2, 2026, the standard tiers for `gemini-2.5-flash-lite` and `gemini-embedding-001` list free usage. This is not an unlimited or permanent free-service guarantee.
+The app supports Gemini embeddings and answer generation as an explicit alternative to OpenAI. See Google's [pricing](https://ai.google.dev/gemini-api/docs/pricing), [API key setup](https://ai.google.dev/gemini-api/docs/api-key), and [embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings). Free quotas vary by account, model, region, and date. As checked on November 2, 2026, the standard tiers for `gemini-3.5-flash-lite` and `gemini-embedding-001` list free usage. This is not an unlimited or permanent free-service guarantee.
 
 1. Create a Gemini API key in Google AI Studio in an eligible **Free-tier project without paid billing**. Do not enable paid billing for this demo. If the account is ineligible or has no free quota, stop rather than upgrade automatically.
 2. In Render → lingua-search → Environment, add `AI_PROVIDER=gemini` and `GEMINI_API_KEY` with your key. Keep `WORKSPACE_TOKEN` unchanged. Leave `OPENAI_API_KEY` empty.
-3. Optionally set `MAX_MODEL_REQUESTS_PER_DAY=50` (the default). Defaults are `GEMINI_CHAT_MODEL=gemini-2.5-flash-lite` and `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`.
+3. Optionally set `MAX_MODEL_REQUESTS_PER_DAY=50` (the default). Defaults are `GEMINI_CHAT_MODEL=gemini-3.5-flash-lite` and `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`.
 4. Select **Save and deploy**. The public configuration endpoint reports the configured provider, never the key. “AI configured” only means a key is present, not that its permissions or quota have been verified.
 5. Test with a small synthetic English PDF and a Chinese question. Confirm the response and source-page citation. Live provider validation requires your own key; CI uses HTTP doubles.
 
@@ -95,3 +95,5 @@ The default cap allows 50 outbound model HTTP requests per UTC day across both p
 Gemini vectors use 768 dimensions to limit memory usage on the free instance. Their cache identity includes provider, model, dimension, and task type; switching from OpenAI triggers reindexing rather than mixing incompatible vectors.
 
 **Privacy:** Google's Free tier may use submitted content to improve products. Extracted PDF passages are sent for embedding; questions and retrieved evidence are sent for answers. Only upload non-sensitive demo material. With no selected provider key, the app makes no model calls.
+
+Live setup note: Google rejected `gemini-2.5-flash-lite` for new accounts with HTTP 404 even though it appeared in the model catalog. The default is now `gemini-3.5-flash-lite`. The protected API surfaces only safe HTTP/reason codes for diagnosis, never upstream error messages or credentials. Recheck model availability and free-tier pricing before changing models.

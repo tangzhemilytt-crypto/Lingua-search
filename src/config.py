@@ -11,7 +11,7 @@ class Settings:
     token: str = os.getenv("WORKSPACE_TOKEN", "")
     provider: str = os.getenv("AI_PROVIDER", "openai").lower()
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_chat_model: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash-lite")
+    gemini_chat_model: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-3.5-flash-lite")
     gemini_embedding_model: str = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
     max_model_requests_per_day: int = int(os.getenv("MAX_MODEL_REQUESTS_PER_DAY", "50"))
     api_key: str = os.getenv("OPENAI_API_KEY", "")
