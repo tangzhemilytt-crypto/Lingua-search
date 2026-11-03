@@ -92,3 +92,9 @@ Tests cover original search behavior, real PDF parsing, upload validation, persi
 ## Scope and next steps
 
 This is a **single-workspace MVP** for a small corpus, not a multi-tenant SaaS. All token holders share the same documents. Production requires a strong token. GitHub Pages cannot host its Python backend. No OCR or PostgreSQL is included; SQLite satisfies this version's persistence requirement. Future work: per-user identity, pgvector, background indexing, evaluation datasets, and streaming answers.
+
+## AI with free quotas (Gemini)
+
+To use Gemini instead of OpenAI, set `AI_PROVIDER=gemini` and a backend-only `GEMINI_API_KEY`, then redeploy. The defaults are `gemini-2.5-flash-lite` for answers and `gemini-embedding-001` for multilingual embeddings. Use an eligible Free-tier project without paid billing; quotas and availability are provider-controlled. Never assume a key is free merely because this app uses it.
+
+The server caps outbound model calls at 50 per UTC day by default (`MAX_MODEL_REQUESTS_PER_DAY`), caches vectors, and never falls back to OpenAI or another provider. The cap persists in SQLite, but resets if your free host discards that database. Free-tier Google content may be used for product improvement: use synthetic, non-sensitive PDFs. See the [free AI setup guide](docs/DEPLOYMENT.md#free-quota-ai-option-gemini) for cost/privacy details and Render settings.

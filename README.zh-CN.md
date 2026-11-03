@@ -111,3 +111,18 @@ pnpm test:e2e
 这是面向小型语料的**单工作区 MVP**,不是多租户 SaaS,所有持有令牌的人共享同一批文档。生产环境需要设置高强度令牌。GitHub Pages 无法托管 Python 后端。项目未包含 OCR 和 PostgreSQL;SQLite 满足当前版本的持久化需求。
 
 后续计划:用户身份、pgvector、后台索引、评测数据集扩充、流式回答。
+
+## 尽量免费使用真正的 AI（Gemini）
+
+项目已支持 Gemini 的多语言嵌入检索和带引用问答。需要在 Google AI Studio 创建密钥，并选择有免费额度、**没有开启付费计费**的项目。免费额度会随账号、模型和地区变化，不能保证永久或不限量。
+
+在 Render 的 Environment 中添加以下两项，然后选择 **Save and deploy**：
+
+| 环境变量 | 值 |
+| --- | --- |
+| `AI_PROVIDER` | `gemini` |
+| `GEMINI_API_KEY` | 您在 Google AI Studio 创建的密钥，勿发到聊天或提交至 GitHub |
+
+保留原有 `WORKSPACE_TOKEN`，将 `OPENAI_API_KEY` 留空。默认使用 `gemini-2.5-flash-lite` 问答及 `gemini-embedding-001` 检索。每日最多调用模型接口 50 次（包括嵌入批次、问题嵌入和回答），可通过 `MAX_MODEL_REQUESTS_PER_DAY` 调整。额度不足会提示，不会自动重试或切换到收费服务。这个本地计数会随 Render 免费磁盘重置，不能当作账单保证；应用也无法判断您的 Google 项目是否开启计费。
+
+界面显示“AI configured”仅代表已配置密钥，实际能力还需用小型英文 PDF 和中文问题验证。Google 免费层可能将提交内容用于改进产品，因此只用不含隐私的演示文件。详细说明见 [部署文档](docs/DEPLOYMENT.md#free-quota-ai-option-gemini)。

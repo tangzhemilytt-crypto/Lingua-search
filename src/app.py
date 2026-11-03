@@ -173,6 +173,8 @@ def create_app(settings=None, provider=None):
             "auth_required": bool(settings.token),
             "max_upload_mb": settings.max_upload_mb,
             "embedding_model": settings.embedding_model if settings.api_key else None,
+            "provider": settings.provider if settings.api_key else None,
+            "max_model_requests_per_day": settings.max_model_requests_per_day,
         }
 
     @app.get("/api/documents", dependencies=secure)
@@ -240,7 +242,7 @@ def create_app(settings=None, provider=None):
                     content,
                     page_count=parsed["pages"],
                     embeddings=vectors,
-                    model=settings.embedding_model if vectors else None,
+                    model=settings.embedding_cache_key if vectors else None,
                 )
             except sqlite3.IntegrityError:
                 raise HTTPException(409, "This PDF is already in your library.")

@@ -23,6 +23,8 @@ export type Config = {
   auth_required: boolean;
   max_upload_mb: number;
   embedding_model: string | null;
+  provider?: "openai" | "gemini" | null;
+  max_model_requests_per_day?: number;
 };
 export const getToken = () => sessionStorage.getItem("lingua-token") || "";
 export async function api<T>(
