@@ -347,4 +347,3 @@ def build_answer(body, sources, provider, settings, public_demo=False):
         "citations": [{"number": i, **sources[i - 1]} for i in sorted(set(ids))],
         "mode": "ai" if settings.api_key else "demo",
     }
-
