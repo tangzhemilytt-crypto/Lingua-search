@@ -25,7 +25,7 @@ import {
   ShieldCheck,
   ArrowRight,
 } from "lucide-react";
-import { api, download, getToken } from "./api";
+import { api, download, getToken, ApiError } from "./api";
 import type { Document, Passage, Source, Answer, Config } from "./api";
 import "./styles.css";
 
@@ -41,6 +41,11 @@ const formatDate = (date: string) =>
     day: "numeric",
   });
 function App() {
+  const [workspace, setWorkspace] = useState<"public" | "private">("public");
+  const publicView = workspace === "public";
+  const [resultNotice, setResultNotice] = useState("");
+  const [resultMode, setResultMode] = useState("lexical");
+  const accessEpoch = useRef(0);
   const [view, setView] = useState<View>("overview");
   const [docs, setDocs] = useState<Document[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
@@ -70,19 +75,48 @@ function App() {
   const input = useRef<HTMLInputElement>(null);
   const queryInput = useRef<HTMLTextAreaElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
-  async function load() {
-    setLoading(true);
+  function clearContext() {
+    setDocs([]); setFilter(""); setScope(""); setResults(null); setAnswer(null); setPreview(null);
+    setDeleting(null); setRenaming(null); setResultNotice(""); setQuery(""); setLastQuery("");
+  }
+  async function load(preference?: "public" | "private") {
+    const epoch = ++accessEpoch.current;
+    clearContext(); setLoading(true); setBusy(false);
+    const target = preference || (getToken() ? "private" : "public");
     try {
       const c = await api<Config>("/config");
+      if (epoch !== accessEpoch.current) return false;
       setConfig(c);
-      const d = await api<{ documents: Document[] }>("/documents");
-      setDocs(d.documents);
-      setError("");
+      try {
+        const d = await api<{ documents: Document[] }>(target === "public" ? "/demo/documents" : "/documents");
+        if (epoch !== accessEpoch.current) return false;
+        setWorkspace(target); setDocs(d.documents); setError(""); return true;
+      } catch (e) {
+        if (epoch !== accessEpoch.current) return false;
+        if (target === "private" && e instanceof ApiError && e.status === 401 && c.public_demo_enabled) {
+          sessionStorage.removeItem("lingua-token");
+          const d = await api<{ documents: Document[] }>("/demo/documents");
+          if (epoch !== accessEpoch.current) return false;
+          setWorkspace("public"); setDocs(d.documents);
+          setError(preference === "private" ? "That workspace token was not accepted. The public demo is still available." : "");
+          return false;
+        }
+        throw e;
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (epoch === accessEpoch.current) setError((e as Error).message);
+      return false;
     } finally {
-      setLoading(false);
+      if (epoch === accessEpoch.current) setLoading(false);
     }
+  }
+  function requestUpload() {
+    if (publicView) { setSettings(true); setMobile(false); }
+    else if (!loading) input.current?.click();
+  }
+  function publicDemo() {
+    sessionStorage.removeItem("lingua-token"); setToken(""); setSettings(false);
+    void load("public");
   }
   useEffect(() => {
     void load();
@@ -113,6 +147,7 @@ function App() {
   }
   async function upload(file?: File) {
     if (!file || busy) return;
+    if (publicView) { setError("Uploads are only available in the private workspace."); return; }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Please choose a PDF file.");
       return;
@@ -138,6 +173,8 @@ function App() {
   }
   async function run(text = query, kind: View = view) {
     if (!text.trim() || busy) return;
+    const epoch = accessEpoch.current;
+    const prefix = publicView ? "/demo" : "";
     const next = kind === "search" ? "search" : "ask";
     setView(next);
     setBusy(true);
@@ -146,6 +183,7 @@ function App() {
     setQuery(text);
     setResults(null);
     setAnswer(null);
+    setResultNotice("");
     try {
       const body = JSON.stringify({
         query: text,
@@ -154,30 +192,36 @@ function App() {
         language,
       });
       if (next === "search") {
-        const r = await api<{ results: Source[] }>("/search", {
+        const r = await api<{ results: Source[]; mode: string; notice?: string }>(`${prefix}/search`, {
           method: "POST",
           body,
         });
-        setResults(r.results);
-      } else setAnswer(await api<Answer>("/ask", { method: "POST", body }));
+        if (epoch !== accessEpoch.current) return;
+        setResults(r.results); setResultMode(r.mode); setResultNotice(r.notice || "");
+      } else {
+        const r = await api<Answer>(`${prefix}/ask`, { method: "POST", body });
+        if (epoch !== accessEpoch.current) return;
+        setAnswer(r); setResultNotice(r.notice || "");
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (epoch === accessEpoch.current) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (epoch === accessEpoch.current) setBusy(false);
     }
   }
   async function openDocument(id: string, page?: number) {
+    const epoch = accessEpoch.current;
     try {
       const d = await api<{ title: string; passages: Passage[] }>(
-        `/documents/${id}`,
+        `${publicView ? "/demo" : ""}/documents/${id}`,
       );
-      setPreview({ ...d, page });
+      if (epoch === accessEpoch.current) setPreview({ ...d, page });
     } catch (e) {
       setError((e as Error).message);
     }
   }
   async function remove() {
-    if (!deleting) return;
+    if (!deleting || publicView) return;
     setBusy(true);
     try {
       await api(`/documents/${deleting.id}`, { method: "DELETE" });
@@ -194,7 +238,7 @@ function App() {
     }
   }
   async function rename() {
-    if (!renaming) return;
+    if (!renaming || publicView) return;
     setBusy(true);
     try {
       await api(`/documents/${renaming.id}`, {
@@ -259,7 +303,7 @@ function App() {
         <div className="workspace">
           <span className="avatar">E</span>
           <div>
-            My workspace<small>Personal knowledge space</small>
+            {publicView ? "Public demo" : "My workspace"}<small>{publicView ? "Read-only · No login needed" : "Private knowledge space"}</small>
           </div>
           <ChevronRight size={15} />
         </div>
@@ -359,13 +403,20 @@ function App() {
           </div>
         </header>
         <main>
+          {publicView ? <section className="access-banner" aria-label="Public demo">
+            <div><strong>Public demo · No login needed</strong><p>Read sample documents, search across languages, and try grounded answers. Your private uploads are separate.</p><small>AI usage is shared and limited; cached answers and keyword excerpts keep the demo available. Use non-sensitive questions.</small></div>
+            <button className="secondary" onClick={() => setSettings(true)}>Private workspace</button>
+          </section> : <section className="access-banner private-access" aria-label="Private workspace">
+            <div><strong>Private workspace</strong><p>Only workspace token holders can access these documents.</p></div>
+            <button className="secondary" onClick={publicDemo}>Sign out to public demo</button>
+          </section>}
           {error && (
             <div role="alert" className="error-banner">
               <span>{error}</span>
               <button onClick={() => setError("")} aria-label="Dismiss error">
                 <X size={16} />
               </button>
-              {config?.auth_required && (
+              {!publicView && config?.auth_required && (
                 <button
                   onClick={() => {
                     setSettings(true);
@@ -393,11 +444,11 @@ function App() {
                 </div>
                 <button
                   className="primary"
-                  onClick={() => input.current?.click()}
+                  onClick={requestUpload}
                   disabled={busy}
                 >
                   <Plus size={17} />
-                  Upload document
+                  {publicView ? "Upload your own PDF" : "Upload document"}
                 </button>
               </div>
               <section className="hero">
@@ -581,18 +632,19 @@ function App() {
               <div className="page-heading">
                 <div>
                   <span className="eyebrow">COLLECT. CONNECT. DISCOVER.</span>
-                  <h1>Your document library</h1>
+                  <h1>{publicView ? "Sample document library" : "Your document library"}</h1>
                   <p>Keep your knowledge close and your sources closer.</p>
                 </div>
                 <button
                   className="primary"
                   disabled={busy}
-                  onClick={() => input.current?.click()}
+                  onClick={requestUpload}
                 >
                   <Plus size={17} />
-                  Upload document
+                  {publicView ? "Upload your own PDF" : "Upload document"}
                 </button>
               </div>
+              {publicView ? <div className="readonly-note"><ShieldCheck size={22}/><div><strong>Read-only sample collection</strong><p>These curated documents are open to everyone. Sign in to your private workspace to upload or manage your own PDFs.</p></div></div> : (
               <div
                 className={`drop-zone ${drag ? "drag" : ""}`}
                 onDragOver={(e) => {
@@ -621,11 +673,12 @@ function App() {
                 <button
                   className="secondary"
                   disabled={busy}
-                  onClick={() => input.current?.click()}
+                  onClick={requestUpload}
                 >
                   Browse files
                 </button>
               </div>
+              )}
               <div className="library-toolbar">
                 <h2>
                   All documents <span>{docs.length}</span>
@@ -672,7 +725,7 @@ function App() {
                         <BookOpen size={15} />
                         Read
                       </button>
-                      <button
+                      {!publicView && <><button
                         aria-label={`Rename ${d.title}`}
                         onClick={() => {
                           setRenaming(d);
@@ -698,7 +751,7 @@ function App() {
                         onClick={() => setDeleting(d)}
                       >
                         <Trash2 size={15} />
-                      </button>
+                      </button></>}
                     </div>
                   </article>
                 ))}
@@ -838,6 +891,7 @@ function App() {
                   </div>
                 </form>
               </section>
+              {resultNotice && <div className="demo-notice" role="status">{resultNotice}</div>}
               <div className="mode-info">
                 <ShieldCheck size={15} />
                 {live
@@ -910,7 +964,7 @@ function App() {
                   <div className="section-heading">
                     <h2>{results.length} relevant passages</h2>
                     <span className="type-label">
-                      {live ? "SEMANTIC + KEYWORD" : "KEYWORD MATCH"}
+                      {resultMode === "semantic" ? "SEMANTIC + KEYWORD" : "KEYWORD MATCH"}
                     </span>
                   </div>
                   {results.length ? (
@@ -920,8 +974,7 @@ function App() {
                       <Search size={30} />
                       <h3>No supporting passages found</h3>
                       <p>
-                        Try another phrase, broaden your document scope, or
-                        upload a relevant PDF.
+                        {publicView ? "Try another phrase or another sample document." : "Try another phrase, broaden your document scope, or upload a relevant PDF."}
                       </p>
                     </div>
                   )}
@@ -962,14 +1015,14 @@ function App() {
           </footer>
         </main>
       </div>
-      <input
+      {!publicView && <input
         ref={input}
         type="file"
         accept="application/pdf,.pdf"
         aria-label="Upload PDF"
         className="visually-hidden"
         onChange={(e) => void upload(e.target.files?.[0])}
-      />
+      />}
       {busy && view !== "ask" && view !== "search" && (
         <div className="processing" role="status">
           <LoaderCircle className="spin" size={18} />
@@ -989,7 +1042,7 @@ function App() {
             and quoted excerpts. Cross-language semantic search and generated
             answers require a server-side API key.
           </p>
-          <div className="settings-detail">
+          {!publicView && <div className="settings-detail">
             <strong>Model configuration</strong>
             <p>
               For Gemini free-tier access, set AI_PROVIDER=gemini and GEMINI_API_KEY in the server environment. OpenAI uses AI_PROVIDER=openai and OPENAI_API_KEY. Redeploy after changing settings. Never paste a model API key into this browser.
@@ -997,13 +1050,14 @@ function App() {
             {live && <small>Provider: {config?.provider || 'openai'} · Answers: {config?.chat_model} · Embeddings: {config?.embedding_model}</small>}
             <small>Free model quotas depend on your provider account. Keep a free-tier project without paid billing for free usage. Google may use free-tier content to improve its products; use non-sensitive demo files.</small>
             <small>The server caps provider requests at {config?.max_model_requests_per_day || 50} per UTC day. Free hosting restarts can reset this counter and remove uploaded documents. Provider selection never falls back to another service.</small>
-          </div>
+          </div>}
+          {publicView && <p>Public samples need no token. Use your workspace token below only to open private uploads and management tools.</p>}
+          {error && <p role="alert">{error}</p>}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               sessionStorage.setItem("lingua-token", token.trim());
-              setSettings(false);
-              void load();
+              void load("private").then(ok => { if (ok) setSettings(false); });
             }}
           >
             <label className="field-label" htmlFor="token">
@@ -1027,17 +1081,11 @@ function App() {
                 type="button"
                 className="secondary"
                 onClick={() => {
-                  sessionStorage.removeItem("lingua-token");
-                  setToken("");
-                  setDocs([]);
-                  setAnswer(null);
-                  setResults(null);
-                  setPreview(null);
-                  setSettings(false);
-                  setNotice("Workspace token cleared.");
+                  publicDemo();
+                  setNotice("You are viewing the public demo.");
                 }}
               >
-                Clear token
+                View public demo
               </button>
               <button className="primary">Save connection</button>
             </div>

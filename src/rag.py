@@ -55,8 +55,9 @@ def cosine(a, b):
 
 
 class Provider:
-    def __init__(self, settings):
+    def __init__(self, settings, scope="private"):
         self.settings = settings
+        self.scope = scope
 
     def _reserve_request(self):
         # Shared across workers/restarts while this SQLite database survives.
@@ -67,6 +68,13 @@ class Provider:
             count = int(row[0]) if row else 0
             if count >= self.settings.max_model_requests_per_day:
                 raise HTTPException(429, "Workspace daily AI request limit reached. Try tomorrow; offline search is still available by disabling the model key.")
+            if self.scope == "demo":
+                demo_key = "demo-" + key
+                demo_row = db.execute("SELECT value FROM metadata WHERE key=?", (demo_key,)).fetchone()
+                demo_count = int(demo_row[0]) if demo_row else 0
+                if demo_count >= self.settings.max_demo_model_requests_per_day:
+                    raise HTTPException(429, "Public AI allowance reached. Sample reading and keyword search remain available.")
+                db.execute("INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (demo_key,str(demo_count+1)))
             db.execute("INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key,str(count+1)))
 
     def _request(self, url, headers, body):
@@ -307,3 +315,36 @@ def retrieve(store, provider, settings, query, ids, limit):
         for r in ranked
         if r["score"] > (0.18 if settings.api_key else 0)
     ][:limit]
+
+
+def build_answer(body, sources, provider, settings, public_demo=False):
+    if not sources:
+        return {
+            "answer": ("No supporting passages found. Try another question or sample document." if public_demo else "No supporting passages found. Try another question or upload a relevant document."),
+            "citations": [],
+            "mode": "ai" if settings.api_key else "demo",
+        }
+    if settings.api_key:
+        answer, ids = provider.answer(
+            body.query,
+            sources,
+            "the same language as the question"
+            if body.language == "Auto"
+            else body.language,
+        )
+        if not ids:
+            answer = "The retrieved passages do not provide enough evidence to answer this question."
+    else:
+        answer = (
+            ("Public evidence preview — keyword-matched original excerpts, not an AI-generated answer.\n\n" if public_demo else "Offline evidence preview — these are matching excerpts, not an AI-generated answer. Enable a model API key on the server for cross-language semantic retrieval and synthesized answers.\n\n")
+            + "\n\n".join(
+                f"“{r['text']}” [{i + 1}]" for i, r in enumerate(sources[:3])
+            )
+        )
+        ids = list(range(1, min(len(sources), 3) + 1))
+    return {
+        "answer": answer,
+        "citations": [{"number": i, **sources[i - 1]} for i in sorted(set(ids))],
+        "mode": "ai" if settings.api_key else "demo",
+    }
+

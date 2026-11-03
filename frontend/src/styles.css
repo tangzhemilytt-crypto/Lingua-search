@@ -1871,3 +1871,13 @@ h1 {
   .sidebar { visibility: hidden; }
   .sidebar.mobile-open { visibility: visible; }
 }
+
+.access-banner { display:flex; align-items:center; gap:20px; justify-content:space-between; padding:18px 21px; margin-bottom:28px; background:#eaf1e1; border:1px solid #d8e4ca; border-radius:9px; color:#385c32; }
+.access-banner strong { font-size:13px; font-weight:600; }
+.access-banner p { font-size:11px; margin:7px 0; color:#66815a; }
+.access-banner small { font-size:10px; line-height:1.5; color:#7c8f6c; }
+.private-access { background:#f0f3e9; }
+.readonly-note { display:flex; align-items:center; gap:15px; padding:24px; margin-bottom:28px; border:1px solid #dfe7d5; background:#f0f4e9; border-radius:8px; }
+.readonly-note p { font-size:11px; color:#819374; margin:9px 0 0; }
+.demo-notice { padding:13px 16px; border:1px solid #dbe5cc; border-radius:7px; color:#647d4f; background:#f0f5e7; font-size:11px; line-height:1.7; margin:16px 0; }
+@media(max-width:700px){.access-banner{align-items:flex-start;flex-direction:column;padding:17px;gap:13px}.access-banner p{font-size:11px}.access-banner small{font-size:9px}.readonly-note{padding:18px;align-items:flex-start}}

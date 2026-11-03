@@ -20,9 +20,12 @@ export default defineConfig({
     env: {
       DATABASE_PATH: "runtime/e2e.sqlite",
       DEMO_SEED: "true",
-      APP_ENV: "development",
+      APP_ENV: "production",
+      PUBLIC_DEMO_ENABLED: "true",
+      AI_PROVIDER: "openai",
+      GEMINI_API_KEY: "",
       OPENAI_API_KEY: "",
-      WORKSPACE_TOKEN: "",
+      WORKSPACE_TOKEN: "test-owner-token-for-public-demo-32-characters",
     },
   },
 });

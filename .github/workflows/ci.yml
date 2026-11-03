@@ -47,5 +47,6 @@ jobs:
             sleep 2
           done
           curl --fail http://localhost:8000/
+          curl --fail http://localhost:8000/api/demo/documents
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/documents)" = "401"
           curl --fail -H 'Authorization: Bearer ci-only-token-with-at-least-32-characters' http://localhost:8000/api/documents

@@ -126,3 +126,11 @@ pnpm test:e2e
 保留原有 `WORKSPACE_TOKEN`，将 `OPENAI_API_KEY` 留空。默认使用 `gemini-3.5-flash-lite` 问答及 `gemini-embedding-001` 检索。每日最多调用模型接口 50 次（包括嵌入批次、问题嵌入和回答），可通过 `MAX_MODEL_REQUESTS_PER_DAY` 调整。额度不足会提示，不会自动重试或切换到收费服务。这个本地计数会随 Render 免费磁盘重置，不能当作账单保证；应用也无法判断您的 Google 项目是否开启计费。
 
 界面显示“AI configured”仅代表已配置密钥，实际能力还需用小型英文 PDF 和中文问题验证。Google 免费层可能将提交内容用于改进产品，因此只用不含隐私的演示文件。详细说明见 [部署文档](docs/DEPLOYMENT.md#free-quota-ai-option-gemini)。
+
+## 给别人直接体验的公开演示区
+
+[打开在线演示](https://lingua-search.onrender.com/)。访客无需口令即可阅读三份预设资料、检索、提问并查看引用。私人文档与演示资料存放在不同数据库中，公开接口无法通过文档编号或查询内容访问私人文件。
+
+上传、下载、重命名和删除功能仍需要在 **Private workspace** 中用工作区口令登录。请只分享网站链接，不要分享工作区口令或模型密钥。
+
+公开 AI 默认每天最多发出 12 次模型请求，并计入总调用上限；常用问题会复用已生成的回答。额度不足时明确显示关键词摘录，不冒充新生成的 AI 回答。免费 Render 重启或部署后，文件、缓存和本地计数仍可能丢失。配置项为 `PUBLIC_DEMO_ENABLED` 和 `MAX_DEMO_MODEL_REQUESTS_PER_DAY`，详见[部署说明](docs/DEPLOYMENT.md#shareable-public-demo-and-private-workspace)。
