@@ -117,18 +117,53 @@ class Provider:
             except (KeyError, TypeError):
                 raise HTTPException(502,"The model returned invalid embeddings. Please try again.")
         system, user = body["messages"]
+        context = json.loads(user["content"])["evidence"]
+        valid_ids = {item["id"] for item in context}
+        # The model returns evidence IDs per claim. Only the server formats
+        # inline markers, rather than relying on prose-formatting compliance.
+        schema = {
+            "type":"OBJECT",
+            "properties":{
+                "claims":{"type":"ARRAY","items":{
+                    "type":"OBJECT",
+                    "properties":{"text":{"type":"STRING"},
+                                  "citation_ids":{"type":"ARRAY","items":{"type":"INTEGER"}}},
+                    "required":["text","citation_ids"]}},
+                "insufficiency":{"type":"STRING"}},
+            "required":["claims","insufficiency"]}
+        instruction = system["content"] + (
+            " Output-format override: return claims (an array of supported claims) and insufficiency (a string). "
+            "Each claim must have text and citation_ids using only the provided evidence IDs. "
+            "Do not write bracket citations in text; the server adds them. "
+            "Keep each claim concise. If evidence is insufficient return claims=[] and explain in insufficiency. "
+            "For supported claims return insufficiency as an empty string.")
         data = self._request(base+quote(self.settings.chat_model, safe="")+":generateContent", headers, {
-            "systemInstruction":{"parts":[{"text":system["content"]}]},
+            "systemInstruction":{"parts":[{"text":instruction}]},
             "contents":[{"role":"user","parts":[{"text":user["content"]}]}],
-            "generationConfig":{"temperature":0.2,"maxOutputTokens":900,"responseMimeType":"application/json"}})
+            "generationConfig":{"temperature":0.2,"maxOutputTokens":1200,
+                                "responseMimeType":"application/json","responseSchema":schema}})
         try:
             candidate = data["candidates"][0]
             if candidate.get("finishReason") != "STOP":
                 raise ValueError()
             text = "".join(part.get("text","") for part in candidate["content"]["parts"] if not part.get("thought"))
-            return {"choices":[{"message":{"content":text}}]}
+            result = json.loads(text)
+            claims = result["claims"]
+            if not isinstance(claims,list) or len(claims)>12 or not isinstance(result["insufficiency"],str):
+                raise ValueError()
+            rendered, cited = [], set()
+            for claim in claims:
+                claim_text, ids = claim["text"], claim["citation_ids"]
+                if (not isinstance(claim_text,str) or not claim_text.strip() or len(claim_text)>4000
+                    or re.search(r"\[\d+\]",claim_text) or not isinstance(ids,list) or not ids
+                    or any(type(i) is not int or i not in valid_ids for i in ids)):
+                    raise ValueError()
+                cited.update(ids)
+                rendered.append(claim_text.strip()+" "+" ".join(f"[{i}]" for i in sorted(set(ids))))
+            answer = "\n\n".join(rendered) if claims else result["insufficiency"]
+            return {"choices":[{"message":{"content":json.dumps({"answer":answer,"citation_ids":sorted(cited)})}}]}
         except (KeyError, IndexError, TypeError, ValueError):
-            raise HTTPException(502, "The model could not produce a complete supported answer. Try a different question.")
+            raise HTTPException(502, "The model returned an incomplete answer or invalid evidence IDs. Please try again.")
 
     def embed(self, texts):
         # Modest batches avoid oversized provider requests for long PDFs.
