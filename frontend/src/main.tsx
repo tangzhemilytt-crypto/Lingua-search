@@ -345,7 +345,7 @@ function App() {
           <div>
             <span className="mode-pill">
               <span className={`dot ${live ? "live" : ""}`} />
-              {live ? "AI connected" : "Offline demo"}
+              {live ? "AI configured" : "Offline demo"}
             </span>
             <a
               className="github-link"
@@ -981,7 +981,7 @@ function App() {
           <div className="connection-status">
             <span className={`dot ${live ? "live" : ""}`} />
             <strong>
-              {live ? "AI provider connected" : "Offline demo mode"}
+              {live ? "AI provider configured" : "Offline demo mode"}
             </strong>
           </div>
           <p>
@@ -992,10 +992,11 @@ function App() {
           <div className="settings-detail">
             <strong>Model configuration</strong>
             <p>
-              Set OPENAI_API_KEY in the server’s .env file, then restart the
-              backend. Never paste a model API key into this browser.
+              For Gemini free-tier access, set AI_PROVIDER=gemini and GEMINI_API_KEY in the server environment. OpenAI uses AI_PROVIDER=openai and OPENAI_API_KEY. Redeploy after changing settings. Never paste a model API key into this browser.
             </p>
-            {live && <small>Embedding model: {config?.embedding_model}</small>}
+            {live && <small>Provider: {config?.provider || 'openai'} · Embeddings: {config?.embedding_model}</small>}
+            <small>Free model quotas depend on your provider account. Keep a free-tier project without paid billing for free usage. Google may use free-tier content to improve its products; use non-sensitive demo files.</small>
+            <small>The server caps provider requests at {config?.max_model_requests_per_day || 50} per UTC day. Free hosting restarts can reset this counter and remove uploaded documents. Provider selection never falls back to another service.</small>
           </div>
           <form
             onSubmit={(e) => {

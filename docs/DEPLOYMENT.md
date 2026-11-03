@@ -77,3 +77,21 @@ docker compose cp linguasearch:/app/runtime/backup.db ./lingua-backup.db
 Keep backups outside the public repository. Back up before upgrading; this v1 creates tables if absent, but future schema changes need explicit migrations. Restore with the service stopped and correct file ownership.
 
 Limits: 100 documents, 5,000 passages total, 100 pages and 300,000 extracted characters per PDF; 20-second isolated parsing timeout; one upload/search/answer/mutation at a time; 60 protected API calls/minute per socket IP. No OCR, background queue, streaming responses, multi-user isolation, external vector database, or PostgreSQL adapter in this MVP. SQLite and linear cosine search suit a small portfolio corpus. For scale, introduce migrations, identity/tenant isolation, background indexing, a shared rate limiter, and pgvector before adding replicas.
+
+## Free-quota AI option: Gemini
+
+The app supports Gemini embeddings and answer generation as an explicit alternative to OpenAI. See Google's [pricing](https://ai.google.dev/gemini-api/docs/pricing), [API key setup](https://ai.google.dev/gemini-api/docs/api-key), and [embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings). Free quotas vary by account, model, region, and date. As checked on November 2, 2026, the standard tiers for `gemini-2.5-flash-lite` and `gemini-embedding-001` list free usage. This is not an unlimited or permanent free-service guarantee.
+
+1. Create a Gemini API key in Google AI Studio in an eligible **Free-tier project without paid billing**. Do not enable paid billing for this demo. If the account is ineligible or has no free quota, stop rather than upgrade automatically.
+2. In Render → lingua-search → Environment, add `AI_PROVIDER=gemini` and `GEMINI_API_KEY` with your key. Keep `WORKSPACE_TOKEN` unchanged. Leave `OPENAI_API_KEY` empty.
+3. Optionally set `MAX_MODEL_REQUESTS_PER_DAY=50` (the default). Defaults are `GEMINI_CHAT_MODEL=gemini-2.5-flash-lite` and `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`.
+4. Select **Save and deploy**. The public configuration endpoint reports the configured provider, never the key. “AI configured” only means a key is present, not that its permissions or quota have been verified.
+5. Test with a small synthetic English PDF and a Chinese question. Confirm the response and source-page citation. Live provider validation requires your own key; CI uses HTTP doubles.
+
+The app does not activate provider billing, choose another provider on failure, retry requests automatically, use paid web-search grounding, or use context caching. Google still determines billing from the project attached to your key: **the app cannot detect or enforce Free-tier billing status**. A key from a paid project can incur charges even under this app's request cap.
+
+The default cap allows 50 outbound model HTTP requests per UTC day across both providers; one question can use a passage-embedding batch, a query embedding, and an answer request. Failed calls count too. Cached passage vectors reduce repeat calls. Counter updates are transactional in SQLite and survive process restarts while the database persists. Render Free discards the database on sleep/redeploy/restart, resetting both the counter and vectors. Therefore this counter is a usage guard, not a billing guarantee. Provider rate-limit/quota errors return 429 with no paid fallback. To return to offline mode, clear the selected provider's API key and redeploy.
+
+Gemini vectors use 768 dimensions to limit memory usage on the free instance. Their cache identity includes provider, model, dimension, and task type; switching from OpenAI triggers reindexing rather than mixing incompatible vectors.
+
+**Privacy:** Google's Free tier may use submitted content to improve products. Extracted PDF passages are sent for embedding; questions and retrieved evidence are sent for answers. Only upload non-sensitive demo material. With no selected provider key, the app makes no model calls.

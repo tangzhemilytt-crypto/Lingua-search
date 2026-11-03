@@ -2,6 +2,9 @@ import json
 import math
 import re
 from collections import Counter
+from datetime import datetime, timezone
+from urllib.parse import quote
+from src.store import Store
 import httpx
 from fastapi import HTTPException
 
@@ -55,21 +58,60 @@ class Provider:
     def __init__(self, settings):
         self.settings = settings
 
-    def post(self, endpoint, body):
+    def _reserve_request(self):
+        # Shared across workers/restarts while this SQLite database survives.
+        key = "model-requests:" + datetime.now(timezone.utc).date().isoformat()
+        with Store(self.settings.database_path).db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
+            count = int(row[0]) if row else 0
+            if count >= self.settings.max_model_requests_per_day:
+                raise HTTPException(429, "Workspace daily AI request limit reached. Try tomorrow; offline search is still available by disabling the model key.")
+            db.execute("INSERT INTO metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key,str(count+1)))
+
+    def _request(self, url, headers, body):
+        self._reserve_request()
         try:
             with httpx.Client(timeout=45) as client:
-                response = client.post(
-                    "https://api.openai.com/v1/" + endpoint,
-                    headers={"Authorization": "Bearer " + self.settings.api_key},
-                    json=body,
-                )
+                response = client.post(url, headers=headers, json=body)
+                if response.status_code == 429:
+                    raise HTTPException(429, "Model quota or rate limit reached. Wait and try again. No other provider was called.")
                 response.raise_for_status()
                 return response.json()
         except (httpx.HTTPError, ValueError):
-            raise HTTPException(
-                502,
-                "Model provider unavailable. Check the server API key, quota, and model settings.",
-            )
+            raise HTTPException(502, "Model provider unavailable. Check the server API key, quota, and model settings.")
+
+    def post(self, endpoint, body):
+        if self.settings.provider == "gemini":
+            return self._gemini_post(endpoint, body)
+        return self._request("https://api.openai.com/v1/"+endpoint,
+            {"Authorization":"Bearer "+self.settings.api_key}, body)
+
+    def _gemini_post(self, endpoint, body):
+        headers = {"x-goog-api-key":self.settings.api_key}
+        base = "https://generativelanguage.googleapis.com/v1beta/models/"
+        if endpoint == "embeddings":
+            model = self.settings.embedding_model
+            data = self._request(base+quote(model, safe="")+":batchEmbedContents", headers, {
+                "requests":[{"model":"models/"+model,"content":{"parts":[{"text":text}]},
+                             "taskType":"SEMANTIC_SIMILARITY","outputDimensionality":768} for text in body["input"]]})
+            try:
+                return {"data":[{"index":i,"embedding":r["values"]} for i,r in enumerate(data["embeddings"])]}
+            except (KeyError, TypeError):
+                raise HTTPException(502,"The model returned invalid embeddings. Please try again.")
+        system, user = body["messages"]
+        data = self._request(base+quote(self.settings.chat_model, safe="")+":generateContent", headers, {
+            "systemInstruction":{"parts":[{"text":system["content"]}]},
+            "contents":[{"role":"user","parts":[{"text":user["content"]}]}],
+            "generationConfig":{"temperature":0.2,"maxOutputTokens":900,"responseMimeType":"application/json"}})
+        try:
+            candidate = data["candidates"][0]
+            if candidate.get("finishReason") != "STOP":
+                raise ValueError()
+            text = "".join(part.get("text","") for part in candidate["content"]["parts"] if not part.get("thought"))
+            return {"choices":[{"message":{"content":text}}]}
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise HTTPException(502, "The model could not produce a complete supported answer. Try a different question.")
 
     def embed(self, texts):
         # Modest batches avoid oversized provider requests for long PDFs.
@@ -171,17 +213,17 @@ def retrieve(store, provider, settings, query, ids, limit):
         pending = [
             r
             for r in rows
-            if not r["embedding"] or r["embedding_model"] != settings.embedding_model
+            if not r["embedding"] or r["embedding_model"] != settings.embedding_cache_key
         ]
         if pending:
             vectors = provider.embed([r["text"] for r in pending])
             with store.db() as db:
                 for row, vector in zip(pending, vectors):
                     row["embedding"] = json.dumps(vector)
-                    row["embedding_model"] = settings.embedding_model
+                    row["embedding_model"] = settings.embedding_cache_key
                     db.execute(
                         "UPDATE chunks SET embedding=?, embedding_model=? WHERE id=?",
-                        (row["embedding"], settings.embedding_model, row["id"]),
+                        (row["embedding"], settings.embedding_cache_key, row["id"]),
                     )
         vector = provider.embed([query])[0]
     for row in rows:
